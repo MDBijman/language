@@ -7,7 +7,7 @@
 #define CATCH_CONFIG_FAST_COMPILE
 #include <catch2/catch.hpp>
 
-#include <filesystem>
+#include <experimental/filesystem>
 #include <iostream>
 
 int main(int argc, char **argv)
@@ -55,10 +55,10 @@ int main(int argc, char **argv)
 			proj.add_module(fe::stdlib::typedefs::load());
 			proj.add_module(fe::stdlib::io::load());
 
-			auto project_path = std::filesystem::path(argv[2]);
+			auto project_path = std::experimental::filesystem::path(argv[2]);
 			std::cout << "Project folder: " << project_path << "\n";
 
-			auto directory_it = std::filesystem::recursive_directory_iterator(argv[2]);
+			auto directory_it = std::experimental::filesystem::recursive_directory_iterator(argv[2]);
 			for (auto &item : directory_it)
 			{
 				auto path = item.path();
