@@ -88,7 +88,8 @@ namespace recursive_descent
 	fe::node_id parse_identifier(tree& t, token_stream_reader& ts)
 	{
 		auto next = ts.next();
-		assert(next.value == lexing::token_kind::IDENTIFIER);
+		if(next.value != token_kind::IDENTIFIER)
+			throw error{ std::string("Expected identifier") };
 		auto id = t.create_node(fe::ext_ast::node_type::IDENTIFIER);
 
 		auto module_name = split_on(std::string(next.text), '.');
@@ -369,7 +370,9 @@ namespace recursive_descent
 	fe::node_id parse_word(tree& t, token_stream_reader& ts)
 	{
 		auto next = ts.next();
-		assert(next.value == token_kind::WORD);
+		if(next.value != token_kind::WORD)
+			throw error{ std::string("Expected string") };
+
 		auto id = t.create_node(fe::ext_ast::node_type::STRING);
 		t.get_data<fe::string>(t.get_node(id).data_index).value = next.text.substr(1, next.text.size() - 2);
 		return id;
@@ -393,7 +396,8 @@ namespace recursive_descent
 	fe::node_id parse_number(tree& t, token_stream_reader& ts)
 	{
 		auto next = ts.next();
-		assert(next.value == token_kind::NUMBER);
+		if(next.value != token_kind::NUMBER)
+			throw error{ std::string("Expected number") };
 		auto id = t.create_node(fe::ext_ast::node_type::NUMBER);
 		t.get_data<fe::number>(t.get_node(id).data_index).value = std::strtoll(next.text.data(), nullptr, 10);
 		return id;
@@ -402,7 +406,8 @@ namespace recursive_descent
 	fe::node_id parse_true(tree& t, token_stream_reader& ts)
 	{
 		auto next = ts.next();
-		assert(next.value == token_kind::TRUE_KEYWORD);
+		if(next.value != token_kind::TRUE_KEYWORD)
+			throw error{ std::string("Expected true") };
 		auto id = t.create_node(fe::ext_ast::node_type::BOOLEAN);
 		t.get_data<fe::boolean>(t.get_node(id).data_index).value = true;
 		return id;
@@ -411,7 +416,8 @@ namespace recursive_descent
 	fe::node_id parse_false(tree& t, token_stream_reader& ts)
 	{
 		auto next = ts.next();
-		assert(next.value == token_kind::FALSE_KEYWORD);
+		if(next.value != token_kind::FALSE_KEYWORD)
+			throw error{ std::string("Expected false") };
 		auto id = t.create_node(fe::ext_ast::node_type::BOOLEAN);
 		t.get_data<fe::boolean>(t.get_node(id).data_index).value = false;
 		return id;
