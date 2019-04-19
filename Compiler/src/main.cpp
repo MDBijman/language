@@ -40,12 +40,6 @@ int main(int argc, char **argv)
 		{
 			if (argc == 2)
 			{
-				std::cout << "Missing project location" << std::endl;
-				std::cin.get();
-				return -1;
-			}
-			else if (argc == 3)
-			{
 				std::cout << "Missing main file name" << std::endl;
 				std::cin.get();
 				return -1;
@@ -55,29 +49,19 @@ int main(int argc, char **argv)
 			proj.add_module(fe::stdlib::typedefs::load());
 			proj.add_module(fe::stdlib::io::load());
 
-			auto project_path = std::experimental::filesystem::path(argv[2]);
-			std::cout << "Project folder: " << project_path << "\n";
+			auto file_path = std::experimental::filesystem::path(argv[2]);
+	
+			std::cout << "\nCompiling file " << file_path.filename() << "\n";
 
-			auto directory_it = std::experimental::filesystem::recursive_directory_iterator(argv[2]);
-			for (auto &item : directory_it)
+			auto file_or_error = utils::files::read_file(file_path.string());
+			if (std::holds_alternative<std::exception>(file_or_error))
 			{
-				auto path = item.path();
-				if (path.filename().extension() != ".fe")
-					continue;
-
-				std::cout << "\nCompiling file " << path.filename() << "\n";
-
-				auto file_or_error = utils::files::read_file(path.string());
-				if (std::holds_alternative<std::exception>(file_or_error))
-				{
-					std::cout << "File not found\n";
-					continue;
-				}
-				auto &code = std::get<std::string>(file_or_error);
-
-				proj.compile_to_file(
-				  "test", code, fe::project_settings(false, false, false, false));
+				std::cout << "File not found\n";
 			}
+			auto &code = std::get<std::string>(file_or_error);
+
+			proj.compile_to_file(
+				"test", code, fe::project_settings(false, false, false, false));
 		}
 		catch (const lexing::error &e)
 		{
