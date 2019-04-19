@@ -406,7 +406,7 @@ namespace fe
 
 		// Helper methods
 
-		const auto make_unique = [](auto &x) { return std::unique_ptr<type>(x.copy()); };
+		const auto make_unique = [](auto x) { return std::unique_ptr<type>(x.copy()); };
 
 		// Operators
 
