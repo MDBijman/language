@@ -25,10 +25,13 @@ namespace fe::ext_ast
 		auto& lhs_node = ast.get_node(children[0]);
 		copy_parent_scope(lhs_node, ast);
 		auto& lhs_data = ast.get_data<identifier>(lhs_node.data_index);
-		assert(lhs_data.module_path.size() == 0);
+		if(lhs_data.module_path.size() != 0)
+			throw fe::resolution_error{ std::string("Cannot assign to module variable") };
 		
 		auto res = scope.resolve_variable(lhs_data.name, ast.name_scope_cb());
-		assert(res);
+		if(!res)
+			throw fe::resolution_error{ std::string("Could not resolve ").append(lhs_data.name) };
+
 		lhs_data.scope_distance = res->scope_distance;
 
 		auto& value_node = ast.get_node(children[1]);
@@ -81,12 +84,16 @@ namespace fe::ext_ast
 
 		auto& id_node = ast.get_node(children[0]);
 		auto& id_data = ast.get_data<identifier>(id_node.data_index);
-		assert(id_data.module_path.size() == 0);
+		if(id_data.module_path.size() != 0)
+			throw fe::resolution_error{ std::string("Cannot assign to module variable") };
 		auto& type_name = id_data.name;
 
 		auto& scope = ast.get_name_scope(n.name_scope_id);
 		auto res = scope.resolve_type(type_name, ast.name_scope_cb());
-		assert(res);
+
+		if(!res)
+			throw fe::resolution_error{ std::string("Could not resolve ").append(id_data.name) };
+
 		id_data.scope_distance = res->scope_distance;
 	}
 
@@ -268,8 +275,10 @@ namespace fe::ext_ast
 		auto& id_node = ast.get_node(children[0]);
 		assert(id_node.kind == node_type::IDENTIFIER);
 		auto& id_data = ast.get_data<identifier>(id_node.data_index);
-		assert(id_data.module_path.size() == 0);
 
+		if(id_data.module_path.size() != 0)
+			throw fe::resolution_error{ std::string("Cannot assign to module variable") };
+			
 		auto& scope = ast.get_name_scope(n.name_scope_id);
 
 		auto& type_node = ast.get_node(children[1]);
@@ -339,7 +348,10 @@ namespace fe::ext_ast
 		{
 			assert(lhs.data_index);
 			auto& lhs_id = ast.get_data<identifier>(lhs.data_index);
-			assert(lhs_id.module_path.size() == 0);
+
+			if(lhs_id.module_path.size() != 0)
+				throw fe::resolution_error{ std::string("Cannot assign to module variable") };
+
 			ast.get_name_scope(lhs.name_scope_id).define_variable(lhs_id.name);
 		}
 		else if (lhs.kind == node_type::IDENTIFIER_TUPLE)
