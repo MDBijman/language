@@ -30,6 +30,8 @@ namespace fe
 		ext_ast::ast parse(const std::string& code) 
 		{
 			auto res = lexer.lex(code);
+			if (std::holds_alternative<lexing::error>(res))
+				throw fe::parse_error{std::get<lexing::error>(res).message};
 			auto parse_output = parser.parse(std::get<std::vector<lexing::token>>(res));
 
 			if (std::holds_alternative<fe::parse_error>(parse_output))
