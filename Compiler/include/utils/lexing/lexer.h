@@ -225,6 +225,7 @@ namespace lexing
 	enum class error_code
 	{
 		UNRECOGNIZED_SYMBOL,
+		EMPTY_SYMBOL
 	};
 
 	struct error
@@ -284,7 +285,10 @@ namespace lexing
 				}
 
 				const auto token_size = std::distance(before_match, range.first);
-				assert(token_size > 0);
+				if(token_size == 0)
+				{
+					return error{ error_code::EMPTY_SYMBOL, "Empty symbol" };
+				}
 
 				// token_size is 64 bits signed but always positive so we can cast to uint32_t
 				character_count += static_cast<uint32_t>(token_size);
