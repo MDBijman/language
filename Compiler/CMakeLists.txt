@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.2)
 project(Compiler C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
-
+target_link_libraries(Compiler stdc++fs)
 # Maybe not use glob?
 # Own sources
 file(GLOB_RECURSE SOURCES src/*.cpp)
