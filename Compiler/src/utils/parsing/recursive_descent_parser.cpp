@@ -12,20 +12,29 @@ namespace recursive_descent
 
 	const lexing::token& token_stream_reader::peek(int n)
 	{
-		assert(curr + n != in.end());
+		if(curr == in.end())
+		{
+			throw error{ std::string("Did not expect end of stream") };
+		}
 		return *(curr + n);
 	}
 
 	lexing::token token_stream_reader::next()
 	{
-		assert(curr != in.end());
+		if(curr == in.end())
+		{
+			throw error{ std::string("Did not expect end of stream") };
+		}
 		return *curr++;
 	}
 
 	void token_stream_reader::consume(lexing::token_kind t)
 	{
 		auto n = next();
-		assert(n.value == t);
+		if(n.value != t)
+		{
+			throw error{ std::string("Expected different token") };
+		}
 	}
 
 	bool token_stream_reader::has_next()
