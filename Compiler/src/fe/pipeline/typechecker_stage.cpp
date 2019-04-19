@@ -894,7 +894,7 @@ namespace fe::ext_ast
 		case node_type::MATCH: case node_type::MATCH_BRANCH: typeof_(n, ast); break;
 		case node_type::MODULE_DECLARATION:
 		case node_type::IMPORT_DECLARATION: break;
-		default: assert(!"This node cannot be typechecked");
+		default: throw std::runtime_error("This node cannot be typechecked");
 		}
 	}
 

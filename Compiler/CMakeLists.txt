@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.2)
 project(Compiler C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
-target_link_libraries(Compiler stdc++fs)
 # Maybe not use glob?
 # Own sources
 file(GLOB_RECURSE SOURCES src/*.cpp)
@@ -19,3 +18,7 @@ target_include_directories(Compiler PRIVATE ${Compiler_SOURCE_DIR}/lib)
 target_include_directories(Compiler PRIVATE ${Compiler_SOURCE_DIR}/include)
 # Include common headers
 target_include_directories(Compiler PRIVATE ${Language_SOURCE_DIR}/common)
+
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    target_link_libraries(Compiler stdc++fs)
+endif()
