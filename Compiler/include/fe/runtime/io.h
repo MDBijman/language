@@ -9,14 +9,15 @@ namespace fe::stdlib::io
 		using namespace types;
 		auto ui64t = ui64();
 		auto voidtt = voidt();
+		auto ftt =function_type(make_unique(ui64t), make_unique(voidtt));
 		return module_builder()
 		  .set_name({ "std", "io" })
 		  .add_native_function(
 		    vm::PRINT, "print",
-		    make_unique(function_type(make_unique(ui64t), make_unique(voidtt))))
+		    make_unique(ftt))
 		  .add_native_function(
 		    vm::PRINTLN, "println",
-		    make_unique(function_type(make_unique(ui64t), make_unique(voidtt))))
+		    make_unique(ftt))
 		  .build();
 	}
 } // namespace fe::stdlib::io
