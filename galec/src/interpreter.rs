@@ -17,22 +17,39 @@ impl Failure {
     }
 }
 
+enum EitherFunction {
+    Function(Function),
+    NativeFunction(NativeFunction)
+}
+
 #[derive(Debug)]
 pub struct Program {
-    functions: HashMap<Name, Function>
+    ast: Tree,
+    functions: HashMap<Name, Function>,
 }
 
 impl Program {
-    fn new() -> Program {
-        Program { functions: HashMap::new() }
+    fn new(ast: Tree) -> Program {
+        Program { ast: ast, functions: HashMap::new() }
     }
 
-    fn extend(&mut self, func: Function) {
-        self.functions.insert(func.name.clone(), func);
+    fn extend(&mut self, name: Name, func: Function) {
+        self.functions.insert(name, func);
     }
 
     fn lookup(&self, name: &Name) -> Option<&Function> {
-        self.functions.get(&name)
+       self.functions.get(name)
+    }
+
+    fn get_name(&self, name: NodeId) -> Option<&Name> {
+        match self.ast.get_node_value(name) {
+            Some(Node::Identifier(id)) => Some(&id.name),
+            _ => None
+        }
+    }
+
+    fn get_node(&self, n: NodeId) -> Option<&Node> {
+        self.ast.get_node_value(n)
     }
 }
 
@@ -92,43 +109,50 @@ fn to_string(_program: &Program, env: &mut Environment) -> Value {
     }
 }
 
-impl File {
-    fn add_function(program: &mut Program, env: &mut Environment, f: Function) {
-        env.extend(f.name.clone(), Value::from_function(f.name.text.clone()));
-        program.extend(f);
-    }
+fn add_function(program: &mut Program, env: &mut Environment, name: Name, f: Function) {
+    env.extend(name.clone(), Value::from_function(name.text.clone()));
+    program.extend(name, f);
+}
 
-    fn interpret(&mut self) -> Result<values::Value, Failure> {
-        let mut env = Environment::new();
-        let mut program = Program::new();
-
-        for f in self.functions.drain(0..) {
-            env.extend(f.name.clone(), Value::from_function(f.name.text.clone()));
-            program.extend(f);
-        }
-
-        File::add_function(&mut program, &mut env, Function::from_native(Name::from_str("std.print"), vec![Identifier::from_str("in")], print));
-        File::add_function(&mut program, &mut env, Function::from_native(Name::from_str("std.println"), vec![Identifier::from_str("in")], println));
-        File::add_function(&mut program, &mut env, Function::from_native(Name::from_str("std.read"), vec![Identifier::from_str("in")], read_file));
-        File::add_function(&mut program, &mut env, Function::from_native(Name::from_str("std.to_string"), vec![Identifier::from_str("in")], to_string));
-
+impl Runnable for File {
+    fn interpret(&self, program: &Program, env: &mut Environment) -> Result<values::Value, Failure> {
         match program.lookup(&Name::from_str("main")) {
-            Some(f) => {
-                for id in f.parameters.iter() {
-                    env.extend(id.name.clone(), values::Value::from_num(3));
+            Some(Function::GaleFunction(g)) => {
+                for id in g.parameters.iter() {
+                    let name = program.get_name(*id).unwrap();
+                    env.extend(name.clone(), values::Value::from_num(3));
                 }
-                f.interpret(&program, &mut env)
+                g.interpret(program, env)
             }
-            None => Err(Failure::new("No main"))
+            None => Err(Failure::new("No main")),
+            _ => unimplemented!()
         }
     }
 }
 
-impl Function {
+impl Runnable for NodeId {
     fn interpret(&self, program: &Program, env: &mut Environment) -> Result<values::Value, Failure> {
-        match &self.implementation {
-            FunctionImpl::Code(t) => t.interpret(program, env),
-            FunctionImpl::Native(func) => Ok(func(program, env))
+        program.get_node(*self).unwrap().interpret(program, env)
+    }
+}
+
+impl Runnable for GaleFunction {
+    fn interpret(&self, program: &Program, env: &mut Environment) -> Result<values::Value, Failure> {
+        self.implementation.interpret(program, env)
+    }
+}
+
+impl Runnable for NativeFunction {
+    fn interpret(&self, program: &Program, env: &mut Environment) -> Result<values::Value, Failure> {
+        Ok((self.implementation)(program, env))
+    }
+}
+
+impl Runnable for Function  {
+    fn interpret(&self, program: &Program, env: &mut Environment) -> Result<values::Value, Failure> {
+        match self {
+            Function::GaleFunction(g) => g.interpret(program, env),
+            Function::NativeFunction(f) => f.interpret(program, env),
         }
     }
 }
@@ -136,7 +160,9 @@ impl Function {
 impl Runnable for Let {
     fn interpret(&self, program: &Program, env: &mut Environment) -> Result<values::Value, Failure> {
         let v = self.exp.interpret(program, env)?;
-        env.extend(self.id.name.clone(), v);
+
+        env.extend(program.get_name(self.id).unwrap().clone(), v);
+
         Ok(values::Value::Void)
     }
 }
@@ -146,7 +172,7 @@ impl Runnable for Seq {
         let mut it = self.elements.iter().peekable();
         while let Some(e) = it.next() {
             if it.peek().is_some() {
-                e.interpret(program, env)?;
+                (*e).interpret(program, env)?;
             } else {
                 return e.interpret(program, env);
             };
@@ -199,33 +225,37 @@ impl Runnable for Boolean {
 
 impl Runnable for Apply {
     fn interpret(&self, program: &Program, env: &mut Environment) -> Result<values::Value, Failure> {
-        let param_val = self.param.interpret(program, env)?;
+        let param_values = self.param.interpret(program, env)?;
 
-        match program.lookup(&self.fn_name.name) {
-            None => Err(Failure::new("Could not find function")),
-            Some(f) => { 
-                let mut new_env = Environment::new();
-                match param_val {
-                    Value::Tuple(values::Tuple{ elements }) => {
-                        if elements.len() == 1 {
-                            // Even though this does exactly as the catchall branch of the match
-                            // it has to be duplicated because a match guard does not allow a move on elements
-                            new_env.extend(f.parameters.get(0).unwrap().name.clone(), Value::from_tuple(elements))
-                        } else {
-                            assert_eq!(f.parameters.len(), elements.len());
-                            for (p, v) in f.parameters.iter().zip(elements.into_iter()) {
-                                new_env.extend(p.name.clone(), v);
-                            }
-                        }
-                    },
-                    _ => {
-                        assert_eq!(f.parameters.len(), 1);
-                        new_env.extend(f.parameters.get(0).unwrap().name.clone(), param_val)
+        let function = program.lookup(program.get_name(self.fn_name).unwrap()).unwrap();
+
+        let param_names = match function {
+            Function::NativeFunction(f) => f.parameters.clone(),
+            Function::GaleFunction(g) => g.parameters.iter().map(|x| program.get_name(*x).unwrap().clone()).collect()
+        };
+
+        let mut new_env = Environment::new();
+
+        match param_values {
+            Value::Tuple(values::Tuple{ elements }) => {
+                // Even though this does exactly the same as the catchall branch of the match
+                // it has to be duplicated because a match guard does not allow a move on elements
+                if elements.len() == 1 {
+                    new_env.extend(param_names[0].clone(), Value::from_tuple(elements));
+                } else {
+                    assert_eq!(param_names.len(), elements.len());
+                    for (p, v) in param_names.into_iter().zip(elements.into_iter()) {
+                        new_env.extend(p, v);
                     }
-                };
-                Ok(f.interpret(program, &mut new_env)?)
+                }
+            },
+            v => {
+                assert_eq!(param_names.len(), 1);
+                new_env.extend(param_names[0].clone(), v);
             }
-        }
+        };
+
+        function.interpret(program, &mut new_env)
     }
 }
 
@@ -249,23 +279,61 @@ impl Runnable for Array {
     }
 }
 
-impl Runnable for Tree {
+impl Runnable for Node {
     fn interpret(&self, program: &Program, env: &mut Environment) -> Result<values::Value, Failure> {
         match self {
-            Tree::Let(n) => n.interpret(program, env),
-            Tree::Seq(n) => n.interpret(program, env),
-            Tree::Identifier(n) => n.interpret(program, env),
-            Tree::BinOp(n) => n.interpret(program, env),
-            Tree::Number(n) => n.interpret(program, env),
-            Tree::Text(n) => n.interpret(program, env),
-            Tree::Apply(n) => n.interpret(program, env),
-            Tree::Tuple(n) => n.interpret(program, env),
-            Tree::Array(n) => n.interpret(program, env),
+            Node::Let(n) => n.interpret(program, env),
+            Node::Seq(n) => n.interpret(program, env),
+            Node::Identifier(n) => n.interpret(program, env),
+            Node::BinOp(n) => n.interpret(program, env),
+            Node::Number(n) => n.interpret(program, env),
+            Node::Text(n) => n.interpret(program, env),
+            Node::Apply(n) => n.interpret(program, env),
+            Node::Tuple(n) => n.interpret(program, env),
+            Node::Array(n) => n.interpret(program, env),
+            Node::File(n) => n.interpret(program, env),
             _ => Err(Failure::new("Cannot interpret this node"))
         }
     }
 }
 
-pub fn interpret(t: &mut File) -> Result<values::Value, Failure> {
-    t.interpret()
+
+pub fn interpret(t: Tree) -> Result<values::Value, Failure> {
+    let mut p = Program::new(t);
+    let mut env = Environment::new();
+
+    add_function(&mut p, &mut env, Name::from_str("std.print"), Function::new_native(Name::from_str("std.print"), vec![Name::from_str("in")], print));
+    add_function(&mut p, &mut env, Name::from_str("std.println"), Function::new_native(Name::from_str("std.println"), vec![Name::from_str("in")], println));
+    add_function(&mut p, &mut env, Name::from_str("std.read"), Function::new_native(Name::from_str("std.read"), vec![Name::from_str("in")], read_file));
+    add_function(&mut p, &mut env, Name::from_str("std.to_string"), Function::new_native(Name::from_str("std.to_string"), vec![Name::from_str("in")], to_string));
+
+    // This is quite messy, since getting the root node requires an immutable borrow but adding the functions requires a mutable one, 
+    // and then interpreting requires an immutable one again
+    let mut program_funcs = Vec::new();
+
+    {
+        let root = p.get_node(root_id).unwrap();
+        match root {
+            Node::File(f) => {
+                for func in f.functions.iter() {
+                    match p.get_node(*func) {
+                        Some(Node::Function(Function::GaleFunction(g))) => {
+                            let f_name = p.get_name(g.name).unwrap();
+                            env.extend(f_name.clone(), Value::from_function(f_name.text.clone()));
+                            program_funcs.push((f_name.clone(), Function::GaleFunction(g.clone())))
+                        },
+                        _ => unimplemented!()
+                    }
+                };
+            },
+            _ => unimplemented!()
+        };
+    };
+
+    for (n, f) in program_funcs.into_iter() {
+        p.extend(n, f);
+    }
+
+    let root = p.get_node(root_id).unwrap();
+    root.interpret(&p, &mut env)
 }

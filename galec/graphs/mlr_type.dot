@@ -1,0 +1,18 @@
+digraph G {
+  "6 Call" -> "7 Id(std.read)" [ label=" =" ];
+  "16 Id(c)" -> "17 ArrayType" [ label=" =" ];
+  "17 ArrayType" -> "18 TypeId(ui8)" [ label=" ∈" ];
+  "19 Array" -> "17 ArrayType" [ label=" =" ];
+  "20 +" -> "19 Array" [ label=" ∈" ];
+  "21 1" -> "22 2" [ label="" ];
+  "22 2" -> "21 1" [ label="" ];
+  "23 2" -> "19 Array" [ label=" ∈" ];
+  "24 3" -> "19 Array" [ label=" ∈" ];
+  "26 Id(f)" -> "27 TypeId(string)" [ label=" =" ];
+  "28 Call" -> "27 TypeId(string)" [ label=" =" ];
+  "28 Call" -> "29 Id(read_in)" [ label=" =" ];
+  "31 Call" -> "32 Id(std.println)" [ label=" =" ];
+  "34 Call" -> "35 Id(std.println)" [ label=" =" ];
+  "36 Call" -> "37 Id(std.to_string)" [ label=" =" ];
+  "40 1" -> "39 Id(c)" [ label="" ];
+}

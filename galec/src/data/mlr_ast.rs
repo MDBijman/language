@@ -1,34 +1,37 @@
 use crate::interpreter::{ Program, Environment };
 use crate::data::values::{ Value };
+use crate::collections::flat_tree::{ FlatTree };
+pub use crate::collections::flat_tree::{ NodeId, root_id, error_id };
+//use std::collections::VecDeque;
+
 // Medium Level Representation AST
 
+pub type Tree = FlatTree<Node>;
 
 // Function and File cannot appear everywhere
 
-#[derive(Debug)]
-pub struct Function {
+#[derive(Debug, Clone)]
+pub struct GaleFunction {
+    pub name: NodeId,
+    pub parameters: Vec<NodeId>,
+    pub implementation: NodeId
+}
+
+pub struct NativeFunction {
     pub name: Name,
-    pub parameters: Vec<Identifier>,
-    pub implementation: FunctionImpl
+    pub parameters: Vec<Name>,
+    pub implementation: fn(&Program, &mut Environment) -> Value
 }
 
-pub enum FunctionImpl {
-    Code(Box<Tree>),
-    Native(fn(&Program, &mut Environment) -> Value)
-}
-
-impl std::fmt::Debug for FunctionImpl {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match &self {
-            FunctionImpl::Code(t) => write!(f, "Code({:?})", t),
-            FunctionImpl::Native(_) => write!(f, "[Native function]")
-        }
-    }
+#[derive(Debug)]
+pub enum Function {
+    GaleFunction(GaleFunction),
+    NativeFunction(NativeFunction)
 }
 
 #[derive(Debug)]
 pub struct File {
-    pub functions: Vec<Function>
+    pub functions: Vec<NodeId>
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -43,25 +46,26 @@ pub struct Identifier {
 
 #[derive(Debug)]
 pub struct Let {
-    pub id: Identifier,
-    pub exp: Box<Tree>
+    pub id: NodeId,
+    pub exp_type: NodeId,
+    pub exp: NodeId
 }
 
 #[derive(Debug)]
 pub struct Seq {
-    pub elements: Vec<Tree>
+    pub elements: Vec<NodeId>
 }
 
 #[derive(Debug)]
 pub struct Apply {
-    pub fn_name: Identifier,
-    pub param: Box<Tree>
+    pub fn_name: NodeId,
+    pub param: NodeId
 }
 
 #[derive(Debug)]
 pub struct BinOp {
-    pub lhs: Box<Tree>,
-    pub rhs: Box<Tree>,
+    pub lhs: NodeId,
+    pub rhs: NodeId,
     pub op_type: BinOpType
 }
 
@@ -89,16 +93,44 @@ pub struct Text {
 
 #[derive(Debug)]
 pub struct Tuple {
-    pub elements: Vec<Tree>
+    pub elements: Vec<NodeId>
 }
 
 #[derive(Debug)]
 pub struct Array {
-    pub elements: Vec<Tree>
+    pub elements: Vec<NodeId>
 }
 
 #[derive(Debug)]
-pub enum Tree {
+pub struct SumType {
+    pub options: Vec<NodeId>,
+}
+
+#[derive(Debug)]
+pub struct ProductType {
+    pub elements: Vec<NodeId>,
+}
+
+#[derive(Debug)]
+pub struct IdentifierType {
+    pub name: Name
+}
+
+#[derive(Debug)]
+pub struct FunctionType {
+    pub from: NodeId,
+    pub to: NodeId,
+}
+
+#[derive(Debug)]
+pub struct ArrayType {
+    pub value_type: NodeId,
+    pub length: usize,
+}
+
+#[derive(Debug)]
+pub enum Node {
+    File(File),
     Let(Let),
     Seq(Seq),
     Identifier(Identifier),
@@ -108,17 +140,99 @@ pub enum Tree {
     Text(Text),
     Tuple(Tuple),
     Array(Array),
-    File(File),
     Function(Function),
-    Apply(Apply)
+    Apply(Apply),
+
+    SumType(SumType),
+    ProductType(ProductType),
+    IdentifierType(IdentifierType),
+    FunctionType(FunctionType),
+    ArrayType(ArrayType),
+    UnitType
 }
 
-impl Tree {
-    pub fn from_text(s: String) -> Tree {
-        Tree::Text(Text { text: s })
+impl Node {
+    pub fn from_text(s: String) -> Node {
+        Node::Text(Text { text: s })
     }
-    pub fn from_array(elems: Vec<Tree>) -> Tree {
-        Tree::Array(Array { elements: elems })
+    pub fn from_array(elems: Vec<NodeId>) -> Node {
+        Node::Array(Array { elements: elems })
+    }
+    pub fn from_tuple(elems: Vec<NodeId>) -> Node {
+        Node::Tuple(Tuple { elements: elems })
+    }
+    pub fn from_let(id: NodeId, exp_type: NodeId, exp: NodeId) -> Node {
+        Node::Let(Let { id: id, exp_type: exp_type, exp: exp })
+    }
+    pub fn from_gale_fn(n: NodeId, p: Vec<NodeId>, b: NodeId) -> Node {
+        Node::Function(Function::new_gale(n, p, b))
+    }
+    pub fn from_native_fn(n: Name, p: Vec<Name>, b: fn(&Program, &mut Environment) -> Value) -> Node {
+        Node::Function(Function::new_native(n, p, b))
+    }
+    pub fn from_seq(ns: Vec<NodeId>) -> Node {
+        Node::Seq(Seq::new(ns))
+    }
+    pub fn from_id(n: Name) -> Node {
+        Node::Identifier(Identifier::from_name(n))
+    }
+    pub fn from_binop(l: NodeId, r: NodeId, op: BinOpType) -> Node {
+        Node::BinOp(BinOp::from(l, r, op))
+    }
+    pub fn from_apply(id: NodeId, params: NodeId) -> Node {
+        Node::Apply(Apply::new(id, params))
+    }
+    pub fn from_file(fns: Vec<NodeId>) -> Node {
+        Node::File(File::from(fns))
+    }
+    pub fn from_num(n: i64) -> Node {
+        Node::Number(Number::from(n))
+    }
+    pub fn from_bool(b: bool) -> Node {
+        Node::Boolean(Boolean::from(b))
+    }
+    pub fn from_sum_type(elems: Vec<NodeId>) -> Node {
+        Node::SumType(SumType { options: elems })
+    }
+    pub fn from_product_type(elems: Vec<NodeId>) -> Node {
+        Node::ProductType(ProductType { elements: elems })
+    }
+    pub fn from_type_id(name: Name) -> Node {
+        Node::IdentifierType(IdentifierType { name: name })
+    }
+    pub fn from_function_type(from: NodeId, to: NodeId) -> Node {
+        Node::FunctionType(FunctionType { from: from, to: to })
+    }
+    pub fn from_array_type(elem_type: NodeId, len: usize) -> Node {
+        Node::ArrayType(ArrayType { value_type: elem_type, length: len })
+    }
+    pub fn from_unit_type() -> Node {
+        Node::UnitType
+    }
+}
+
+impl std::fmt::Display for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Node::Let(n) => write!(f, "Let"),
+            Node::Seq(n) => write!(f, "Seq"),
+            Node::Identifier(n) => write!(f, "Id({})", n.name),
+            Node::BinOp(n) => write!(f, "{}", n.op_type),
+            Node::Number(n) => write!(f, "{}", n.value),
+            Node::Text(n) => write!(f, "{}", n.text),
+            Node::Apply(n) => write!(f, "Call"),
+            Node::Tuple(n) => write!(f, "Tuple"),
+            Node::Array(n) => write!(f, "Array"),
+            Node::File(n) => write!(f, "File"),
+            Node::Function(n) => write!(f, "Fn"),
+            Node::SumType(n) => write!(f, "SumType"),
+            Node::ProductType(n) => write!(f, "ProductType"),
+            Node::IdentifierType(n) => write!(f, "TypeId({})", n.name),
+            Node::FunctionType(n) => write!(f, "FnType"),
+            Node::ArrayType(n) => write!(f, "ArrayType"),
+            Node::UnitType => write!(f, "UnitType"),
+            n => unimplemented!() 
+        }
     }
 }
 
@@ -131,20 +245,50 @@ impl Name {
     pub fn from_str(s: &str) -> Name {
         Name::from_string(String::from(s))
     }
+    pub fn new() -> Name {
+        Name::from_string(String::new())
+    }
+}
+
+impl std::fmt::Display for Name {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.text)
+    }
 }
 
 impl Function {
-    pub fn from_code(n: Name, p: Vec<Identifier>, b: Box<Tree>) -> Function {
-        Function { name: n, parameters: p, implementation: FunctionImpl::Code(b) }
+    pub fn new_gale(n: NodeId, p: Vec<NodeId>, b: NodeId) -> Function {
+        Function::GaleFunction(GaleFunction { name: n, parameters: p, implementation: b })
     }
-    pub fn from_native(n: Name, p: Vec<Identifier>, b: fn(&Program, &mut Environment) -> Value) -> Function {
-        Function { name: n, parameters: p, implementation: FunctionImpl::Native(b) }
+    pub fn new_native(n: Name, p: Vec<Name>, b: fn(&Program, &mut Environment) -> Value) -> Function {
+        Function::NativeFunction(NativeFunction { name: n, parameters: p, implementation: b })
+    }
+}
+
+impl GaleFunction {
+    pub fn new(n: NodeId, p: Vec<NodeId>, b: NodeId) -> GaleFunction {
+        GaleFunction { name: n, parameters: p, implementation: b }
+    }
+}
+
+impl NativeFunction {
+    pub fn new(n: Name, p: Vec<Name>, b: fn(&Program, &mut Environment) -> Value) -> NativeFunction {
+        NativeFunction { name: n, parameters: p, implementation: b }
+    }
+}
+
+impl std::fmt::Debug for NativeFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Native Function {{ name: {:?}, parameters: {:?} }}", self.name, self.parameters)
     }
 }
 
 impl File {
     pub fn new() -> File {
         File{ functions: Vec::new() }
+    }
+    pub fn from(fns: Vec<NodeId>) -> File {
+        File{ functions: fns }
     }
 }
 
@@ -163,26 +307,36 @@ impl Identifier {
 }
 
 impl Let {
-    pub fn new(id: Identifier, exp: Tree) -> Let {
-        Let { id: id, exp: Box::from(exp) }
+    pub fn new(id: NodeId, exp_type: NodeId, exp: NodeId) -> Let {
+        Let { id: id, exp_type: exp_type, exp: exp }
     }
 }
 
 impl Seq {
-    pub fn new(stmts: Vec<Tree>) -> Seq {
+    pub fn new(stmts: Vec<NodeId>) -> Seq {
         Seq { elements: stmts }
     }
 }
 
 impl Apply {
-    pub fn new(id: Identifier, param: Tree) -> Apply {
-        Apply { fn_name: id, param: Box::from(param) }
+    pub fn new(id: NodeId, param: NodeId) -> Apply {
+        Apply { fn_name: id, param: param }
     }
 }
 
 impl BinOp {
-    pub fn from(lhs: Tree, rhs: Tree, op_type: BinOpType) -> BinOp {
-        BinOp { lhs: Box::from(lhs), rhs: Box::from(rhs), op_type: op_type }
+    pub fn from(lhs: NodeId, rhs: NodeId, op_type: BinOpType) -> BinOp {
+        BinOp { lhs: lhs, rhs: rhs, op_type: op_type }
+    }
+}
+
+impl std::fmt::Display for BinOpType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            BinOpType::Plus => write!(f, "+"),
+            BinOpType::Mult => write!(f, "*"),
+            BinOpType::ArrIndex => write!(f, "!!"),
+        }
     }
 }
 
@@ -199,8 +353,7 @@ impl Boolean {
 }
 
 impl Tuple {
-    pub fn from(elems: Vec<Tree>) -> Tuple {
+    pub fn from(elems: Vec<NodeId>) -> Tuple {
         Tuple { elements: elems }
     }
 }
-

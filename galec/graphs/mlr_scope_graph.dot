@@ -1,0 +1,5 @@
+digraph G {
+  "1 3 Fn" -> "0 0 File" [ label="" ];
+  "2 3 Id(read_in)" -> "1 3 Fn" [ label="" ];
+  "3 3 FnType" -> "0 0 File" [ label="" ];
+}
